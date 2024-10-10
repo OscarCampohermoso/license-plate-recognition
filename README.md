@@ -1,6 +1,3 @@
-Aquí tienes un ejemplo de un archivo `README.md` que puedes usar para tu proyecto:
-
-```markdown
 # License Plate Recognition Project
 
 Este proyecto utiliza un modelo de reconocimiento de matrículas de vehículos. Asegúrate de seguir los pasos a continuación para configurar y ejecutar el proyecto correctamente.
