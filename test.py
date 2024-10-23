@@ -26,38 +26,39 @@ np_model = YOLO('./runs/detect/train/weights/best.pt')
 
 # Initialize OCR reader
 reader = easyocr.Reader(['en'])  # Specify the language for OCR
+
 def license_complies_format(text):
     print("Checking license plate format:")
     print(text)
 
-    # Check for 5 or 7 characters (3 or 4 digits + 2 or 3 letters)
-    if len(text) not in [5, 7]:
+    # Ensure the text is uppercase
+    text = text.upper()
+
+    # Check if the text is empty
+    if not text:
         print("License plate format is incorrect.")
         return False
 
-    # Split the text into digits and letters based on its length
-    if len(text) == 5:
-        digits_part = text[:3]  # First 3 digits
-        letters_part = text[3:]  # Last 2 letters
-    else:  # len(text) == 7
-        digits_part = text[:4]  # First 4 digits
-        letters_part = text[4:]  # Last 3 letters
-
-    # Check if the digits part is valid
-    for char in digits_part:
-        if char not in '0123456789' and char not in dict_char_to_int.keys():
+    # Split the text into digits and letters
+    digits_part = ""
+    letters_part = ""
+    for char in text:
+        if char in '0123456789' or char in dict_char_to_int.keys():
+            digits_part += char
+        elif char in string.ascii_uppercase or char in dict_int_to_char.keys():
+            letters_part += char
+        else:
             print("License plate format is incorrect.")
             return False
 
-    # Check if the letters part is valid
-    for char in letters_part:
-        if char not in string.ascii_uppercase and char not in dict_int_to_char.keys():
-            print("License plate format is incorrect.")
-            return False
-
-    print("License plate format is correct.")
-    print("License plate: ", text)
-    return True
+    # Check if there are digits at the beginning and letters at the end
+    if digits_part and letters_part:
+        print("License plate format is correct.")
+        print("License plate: ", text)
+        return True
+    else:
+        print("License plate format is incorrect.")
+        return False
 
 
 def format_license(text):
@@ -114,7 +115,7 @@ def read_license_plate(license_plate_crop):
     return None, None
 
 # Load the static image
-image_path = './img/6009PLU.jpg'
+image_path = './img/5686RDH.jpg'
 image = cv.imread(image_path)
 
 # Ensure tracking logic is bypassed
@@ -148,9 +149,11 @@ for detection in detections.boxes.data.tolist():
 
             # Convert the plate to grayscale
             plate_gray = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
+            height = plate_gray.shape[0]
+            cropped_plate = plate_gray[int(height * 0.3):, :]  # Remove bottom part of license plate
 
             # OCR to read the license plate text
-            np_text, np_score = read_license_plate(plate_gray)
+            np_text, np_score = read_license_plate(cropped_plate)
             print(np_text, np_score)
             # If plate is readable, store results
             if np_text is not None:
@@ -171,6 +174,43 @@ for detection in detections.boxes.data.tolist():
                 cv.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
                 cv.rectangle(roi, (int(plate_x1), int(plate_y1)), (int(plate_x2), int(plate_y2)), (0, 255, 0), 2)
                 cv.putText(roi, np_text, (int(plate_x1), int(plate_y1 - 10)), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+
+# If no vehicles were detected, try to detect license plates in the whole image
+if not vehicle_bounding_boxes:
+    print("No vehicles detected, trying to detect license plates in the whole image.")
+    license_plates = np_model.predict(image)[0]
+    for license_plate in license_plates.boxes.data.tolist():
+        plate_x1, plate_y1, plate_x2, plate_y2, plate_score, _ = license_plate
+
+        # Crop the plate from the whole image
+        plate = image[int(plate_y1):int(plate_y2), int(plate_x1):int(plate_x2)]
+
+        # Convert the plate to grayscale
+        plate_gray = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
+        height = plate_gray.shape[0]
+        cropped_plate = plate_gray[int(height * 0.3):, :]  # Remove bottom part of license plate
+
+        # OCR to read the license plate text
+        np_text, np_score = read_license_plate(cropped_plate)
+        print(np_text, np_score)
+        # If plate is readable, store results
+        if np_text is not None:
+            results[None] = {  # track_id is None
+                'car': {
+                    'bbox': [0, 0, image.shape[1], image.shape[0]],  # Whole image
+                    'bbox_score': 1.0  # Full confidence since no vehicle detection
+                },
+                'license_plate': {
+                    'bbox': [plate_x1, plate_y1, plate_x2, plate_y2],
+                    'bbox_score': plate_score,
+                    'number': np_text,
+                    'text_score': np_score
+                }
+            }
+
+            # Draw license plate bounding box on the image
+            cv.rectangle(image, (int(plate_x1), int(plate_y1)), (int(plate_x2), int(plate_y2)), (0, 255, 0), 2)
+            cv.putText(image, np_text, (int(plate_x1), int(plate_y1 - 10)), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
 
 # Show the results in a window
 cv.imshow('License Plate Detection', image)
