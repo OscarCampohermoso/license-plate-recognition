@@ -24,3 +24,26 @@ Asegúrate de que los archivos descargados se encuentren en la raíz del proyect
 ## Uso
 
 Después de haber instalado las dependencias y descargado el dataset, puedes empezar a utilizar el proyecto. Asegúrate de tener todos los archivos necesarios en la estructura correcta.
+
+
+### Probar la api
+dependencias para instalar:
+
+```bash
+pip install fastapi uvicorn python-multipart pillow easyocr ultralytics opencv-python
+```
+
+* Levantar el servidor:
+```bash
+uvicorn main:app --reload
+```
+
+* para probar la api se debe hacer correr el archivo api_test.py, se generará "output.jpg" como salida
+
+si no se dibujaran los rectangulos:
+```bash
+pip uninstall opencv-python
+pip install opencv-python-headless
+pip install opencv-python --upgrade
+
+```
