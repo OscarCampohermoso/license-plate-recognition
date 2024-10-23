@@ -7,58 +7,76 @@ from ultralytics import YOLO
 # characters that can easily be confused can be
 # verified by their location - an `O` in a place
 # where a number is expected is probably a `0`
-dict_char_to_int = {'O': '0',
-                    'I': '1',
-                    'J': '3',
-                    'A': '4',
-                    'G': '6',
-                    'S': '5'}
 
-dict_int_to_char = {'0': 'O',
-                    '1': 'I',
-                    '3': 'J',
-                    '4': 'A',
-                    '6': 'G',
-                    '5': 'S'}
+
+dict_char_to_int = {
+    'O': '0',
+    'I': '1',
+    'J': '3',
+    'A': '4',
+    'G': '6',
+    'S': '5',
+    'T': '7',
+    'B': '8',
+    'P': '9',
+    'Z': '2',
+    'D': '0',
+    'Q': '9',
+    'C': '6',
+    'L': '1', 
+}
+
+dict_int_to_char = {
+    '0': 'O',
+    '1': 'I',
+    '3': 'J',
+    '4': 'A',
+    '6': 'G',
+    '5': 'S',
+    '8': 'B',
+    '9': 'P',
+    '2': 'Z',  
+}
+
 
 coco_model = YOLO('yolov8s.pt')  # Pre-trained YOLO model for car detection
 np_model = YOLO('./runs/detect/train/weights/best.pt')
 
 # Initialize OCR reader
-reader = easyocr.Reader(['en'])  # Specify the language for OCR
+reader = easyocr.Reader(['es'])  # Specify the language for OCR
 
-def license_complies_format(text):
-    print("Checking license plate format:")
-    print(text)
+# def license_complies_format(text):
+#     print("Checking license plate format:")
+#     print(text)
 
-    # Ensure the text is uppercase
-    text = text.upper()
+#     # Ensure the text is uppercase
+#     text = text.upper()
 
-    # Check if the text is empty
-    if not text:
-        print("License plate format is incorrect.")
-        return False
+#     # Check if the text is empty
+#     if not text:
+#         print("License plate format is incorrect.")
+#         return False
 
-    # Split the text into digits and letters
-    digits_part = ""
-    letters_part = ""
-    for char in text:
-        if char in '0123456789' or char in dict_char_to_int.keys():
-            digits_part += char
-        elif char in string.ascii_uppercase or char in dict_int_to_char.keys():
-            letters_part += char
-        else:
-            print("License plate format is incorrect.")
-            return False
+#     # Split the text into digits and letters
+#     digits_part = ""
+#     letters_part = ""
+#     for char in text:
+#         if char in '0123456789' or char in dict_char_to_int.keys():
+#             digits_part += char
+#         elif char in string.ascii_uppercase or char in dict_int_to_char.keys():
+#             letters_part += char
+#         else:
+#             print("License plate format is incorrect.")
+#             return False
 
-    # Check if there are digits at the beginning and letters at the end
-    if digits_part and letters_part:
-        print("License plate format is correct.")
-        print("License plate: ", text)
-        return True
-    else:
-        print("License plate format is incorrect.")
-        return False
+#     # Check if there are digits at the beginning and letters at the end
+#     if digits_part and letters_part:
+#         print("License plate format is correct.")
+#         print("License plate: ", text)
+#         return True
+#     else:
+#         print("License plate format is incorrect.")
+#         return False
 
 
 def format_license(text):
@@ -115,16 +133,29 @@ def read_license_plate(license_plate_crop):
         print("Text: ", text, "Score: ", score)
         
         #Verify if the detected text matches a valid license plate format
-        if license_complies_format(text):
-            # If valid, return the formatted license plate and its OCR score
-            print("Valid license plate detected: ", text)
-            return format_license(text), score
+        return format_license(text), score
 
-    # If no valid license plate is found, return None
     return None, None
 
+
+def preprocess_image(image):
+    # Convert to grayscale
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    # Apply GaussianBlur
+    blurred = cv.GaussianBlur(gray, (5, 5), 0)
+    # Apply Otsu's thresholding
+    # threshold(src, thresh, maxval, type[, dst]) -> retval, dst
+    _, thresh = cv.threshold(blurred, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU)
+
+    height = thresh.shape[0]
+    width = thresh.shape[1]
+    # Remove part of the bottom and part of the top of the license plate
+    cropped_plate = thresh[int(height * 0.35):int(height * 0.85), int(width * 0.05):int(width * 0.95)]
+
+    return cropped_plate
+
 # Load the static image
-image_path = './img/5686RDH.jpg'
+image_path = './img/4472SKF.jpg'
 image = cv.imread(image_path)
 
 # Ensure tracking logic is bypassed
@@ -156,13 +187,11 @@ for detection in detections.boxes.data.tolist():
             # Crop the plate from the region of interest
             plate = roi[int(plate_y1):int(plate_y2), int(plate_x1):int(plate_x2)]
 
-            # Convert the plate to grayscale
-            plate_gray = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
-            height = plate_gray.shape[0]
-            cropped_plate = plate_gray[int(height * 0.3):, :]  # Remove bottom part of license plate
+            # Put filters on the plate
+            new_image = preprocess_image(plate)
 
             # OCR to read the license plate text
-            np_text, np_score = read_license_plate(cropped_plate)
+            np_text, np_score = read_license_plate(new_image)
             print(np_text, np_score)
             # If plate is readable, store results
             if np_text is not None:
@@ -182,7 +211,7 @@ for detection in detections.boxes.data.tolist():
                 # Draw vehicle and license plate bounding boxes on the image
                 cv.rectangle(image, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
                 cv.rectangle(roi, (int(plate_x1), int(plate_y1)), (int(plate_x2), int(plate_y2)), (0, 255, 0), 2)
-                cv.putText(roi, np_text, (int(plate_x1), int(plate_y1 - 10)), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+                cv.putText(roi, np_text, (int(plate_x1), int(plate_y1 - 10)), cv.FONT_HERSHEY_SIMPLEX, 2.0, (0, 255, 0), 2)
 
 # If no vehicles were detected, try to detect license plates in the whole image
 if not vehicle_bounding_boxes:
@@ -194,13 +223,13 @@ if not vehicle_bounding_boxes:
         # Crop the plate from the whole image
         plate = image[int(plate_y1):int(plate_y2), int(plate_x1):int(plate_x2)]
 
-        # Convert the plate to grayscale
-        plate_gray = cv.cvtColor(plate, cv.COLOR_BGR2GRAY)
-        height = plate_gray.shape[0]
-        cropped_plate = plate_gray[int(height * 0.3):, :]  # Remove bottom part of license plate
+        # Put filters on the plate
+        new_image = preprocess_image(plate)
 
         # OCR to read the license plate text
-        np_text, np_score = read_license_plate(cropped_plate)
+        np_text, np_score = read_license_plate(new_image)
+        # show cropped plate
+
         print(np_text, np_score)
         # If plate is readable, store results
         if np_text is not None:
@@ -219,7 +248,7 @@ if not vehicle_bounding_boxes:
 
             # Draw license plate bounding box on the image
             cv.rectangle(image, (int(plate_x1), int(plate_y1)), (int(plate_x2), int(plate_y2)), (0, 255, 0), 2)
-            cv.putText(image, np_text, (int(plate_x1), int(plate_y1 - 10)), cv.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+            cv.putText(image, np_text, (int(plate_x1), int(plate_y1 - 10)), cv.FONT_HERSHEY_SIMPLEX, 3.0, (0, 255, 0), 2)
 
 # Show the results in a window
 cv.imshow('License Plate Detection', image)
