@@ -93,6 +93,14 @@ def format_license(text):
 
     return formatted_plate
 
+def clean_license_plate_text(text):
+    """
+    Clean the license plate text by removing any characters that are not digits or uppercase letters.
+    """
+    valid_chars = '0123456789' + string.ascii_uppercase
+    cleaned_text = ''.join(char for char in text if char in valid_chars)
+    return cleaned_text
+
 def read_license_plate(license_plate_crop):
     # Perform OCR on the cropped license plate image
     detections = reader.readtext(license_plate_crop)
@@ -103,6 +111,7 @@ def read_license_plate(license_plate_crop):
 
         # Process the text: convert to uppercase and remove spaces
         text = text.upper().replace(' ', '')
+        text = clean_license_plate_text(text)
         print("Text: ", text, "Score: ", score)
         
         #Verify if the detected text matches a valid license plate format
